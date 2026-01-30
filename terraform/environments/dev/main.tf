@@ -1,14 +1,22 @@
-terraform {
-  required_version = ">= 1.5.0"
-
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 3.0"
-    }
-  }
+resource "azurerm_resource_group" "rg" {
+  name     = "rg-ai-terraform-reviewer-dev"
+  location = "East US"
 }
 
-provider "azurerm" {
-  features {}
+module "shared_network" {
+  source              = "../../modules/network"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+
+  vnet_name     = "vnet-shared-dev"
+  address_space = ["10.0.0.0/16"]
+
+  subnets = {
+    shared-subnet = {
+      address_prefixes = ["10.0.1.0/24"]
+    }
+    app-subnet = {
+      address_prefixes = ["10.0.2.0/24"]
+    }
+  }
 }
