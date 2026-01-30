@@ -1,28 +1,23 @@
+print("DEBUG: enrich.py started")
+
 import json
 import sys
-from pathlib import Path
 
 
 def infer_environment(plan_path: str) -> str:
-    # Simple environment inference
     if "prod" in plan_path.lower():
         return "prod"
     return "dev"
 
 
 def classify_resource(address: str) -> str:
-    # Simple but powerful signal
     if "shared" in address.lower():
         return "shared-infra"
     return "app-infra"
 
 
 def enrich_plan(plan_file: str, output_file: str):
-    print("DEBUG: enrich.py started")
-
-    plan_path = Path(plan_file)
-    if not plan_path.exists():
-        raise FileNotFoundError(f"{plan_file} not found")
+    print(f"DEBUG: reading plan file {plan_file}")
 
     with open(plan_file, "r") as f:
         plan = json.load(f)
@@ -37,10 +32,7 @@ def enrich_plan(plan_file: str, output_file: str):
         "resources": []
     }
 
-    resource_changes = plan.get("resource_changes", [])
-    print(f"DEBUG: Found {len(resource_changes)} resource changes")
-
-    for rc in resource_changes:
+    for rc in plan.get("resource_changes", []):
         actions = rc.get("change", {}).get("actions", [])
 
         for action in actions:
@@ -57,12 +49,12 @@ def enrich_plan(plan_file: str, output_file: str):
     with open(output_file, "w") as f:
         json.dump(enriched, f, indent=2)
 
-    print(f"Enriched context written to {output_file}")
+    print(f"SUCCESS: Enriched context written to {output_file}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("Usage: python enrich.py <tfplan.json> <output.json>")
+        print("ERROR: Usage: python enrich.py <tfplan.json> <output.json>")
         sys.exit(1)
 
     enrich_plan(sys.argv[1], sys.argv[2])
