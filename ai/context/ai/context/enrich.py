@@ -4,19 +4,26 @@ from pathlib import Path
 
 
 def infer_environment(plan_path: str) -> str:
-    # Simple but powerful inference
+    # Simple environment inference
     if "prod" in plan_path.lower():
         return "prod"
     return "dev"
 
 
 def classify_resource(address: str) -> str:
-    if "shared" in address:
+    # Simple but powerful signal
+    if "shared" in address.lower():
         return "shared-infra"
     return "app-infra"
 
 
 def enrich_plan(plan_file: str, output_file: str):
+    print("DEBUG: enrich.py started")
+
+    plan_path = Path(plan_file)
+    if not plan_path.exists():
+        raise FileNotFoundError(f"{plan_file} not found")
+
     with open(plan_file, "r") as f:
         plan = json.load(f)
 
@@ -30,8 +37,12 @@ def enrich_plan(plan_file: str, output_file: str):
         "resources": []
     }
 
-    for rc in plan.get("resource_changes", []):
+    resource_changes = plan.get("resource_changes", [])
+    print(f"DEBUG: Found {len(resource_changes)} resource changes")
+
+    for rc in resource_changes:
         actions = rc.get("change", {}).get("actions", [])
+
         for action in actions:
             if action in enriched["summary"]:
                 enriched["summary"][action] += 1
