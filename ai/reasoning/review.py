@@ -3,54 +3,76 @@ import sys
 
 
 def assess_risk(enriched_context: dict) -> dict:
-    risk = "LOW"
-    reasons = []
-    comments = []
-
     environment = enriched_context.get("environment", "unknown")
     resources = enriched_context.get("resources", [])
     summary = enriched_context.get("summary", {})
 
-    # Signal 1: Shared infrastructure modified
+    risk = "LOW"
+    reasons = []
+    comments = []
+
+    # -------------------------
+    # Signal 1: Shared Infra
+    # -------------------------
     shared_changes = [
         r for r in resources if r.get("classification") == "shared-infra"
     ]
     if shared_changes:
         risk = "MEDIUM"
         reasons.append(
-            "Shared infrastructure resources are being modified, increasing blast radius."
+            "Shared Azure infrastructure is being modified, increasing blast radius across workloads."
         )
         comments.append(
-            "⚠️ Shared infrastructure change detected. "
-            "Changes to shared components can impact multiple services."
+            "⚠️ Shared Azure infrastructure change detected. "
+            "Failures here can impact multiple teams and services."
         )
 
-    # Signal 2: Network-related resources
+    # -------------------------
+    # Signal 2: Azure Networking
+    # -------------------------
     network_types = ["azurerm_virtual_network", "azurerm_subnet"]
     network_changes = [
         r for r in resources if r.get("type") in network_types
     ]
     if network_changes:
-        if risk == "MEDIUM":
-            risk = "HIGH"
-        else:
-            risk = "MEDIUM"
+        risk = "HIGH"
         reasons.append(
-            "Network resources are being modified, which can affect connectivity."
+            "Azure networking resources are being modified, which can affect connectivity, routing, or IP allocation."
         )
         comments.append(
-            "⚠️ Network-level changes detected. "
-            "Ensure no workloads are unintentionally impacted."
+            "🚨 Azure network-level changes detected. "
+            "Subnet or VNet changes are high risk and difficult to rollback."
         )
 
-    # Signal 3: Large number of changes
-    if summary.get("create", 0) + summary.get("update", 0) + summary.get("delete", 0) >= 5:
+    # -------------------------
+    # Signal 3: Environment Escalation
+    # -------------------------
+    if environment == "prod":
+        risk = "HIGH"
+        reasons.append(
+            "Changes are targeting the production environment with potential customer impact."
+        )
+        comments.append(
+            "🚨 Production environment change detected. "
+            "Recommend change window, validation plan, and rollback strategy."
+        )
+
+    # -------------------------
+    # Signal 4: Change Volume
+    # -------------------------
+    total_changes = (
+        summary.get("create", 0)
+        + summary.get("update", 0)
+        + summary.get("delete", 0)
+    )
+    if total_changes >= 5:
         risk = "HIGH"
         reasons.append(
             "Multiple infrastructure changes in a single deployment increase operational risk."
         )
         comments.append(
-            "⚠️ High number of infrastructure changes detected in one plan."
+            "⚠️ Large infrastructure change detected. "
+            "Consider breaking this into smaller, staged deployments."
         )
 
     return {
@@ -61,7 +83,7 @@ def assess_risk(enriched_context: dict) -> dict:
     }
 
 
-def main(input_file: str, output_file: str):
+def main(input_file, output_file):
     with open(input_file, "r") as f:
         enriched_context = json.load(f)
 
@@ -70,7 +92,7 @@ def main(input_file: str, output_file: str):
     with open(output_file, "w") as f:
         json.dump(review, f, indent=2)
 
-    print("SUCCESS: AI review generated")
+    print("SUCCESS: Azure-aware AI review generated")
     print(json.dumps(review, indent=2))
 
 
