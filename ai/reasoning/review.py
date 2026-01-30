@@ -10,10 +10,11 @@ def assess_risk(enriched_context: dict) -> dict:
     risk = "LOW"
     reasons = []
     comments = []
+    recommendations = []
 
-    # -------------------------
-    # Signal 1: Shared Infra
-    # -------------------------
+    # ---------------------------------
+    # Signal 1: Shared Infrastructure
+    # ---------------------------------
     shared_changes = [
         r for r in resources if r.get("classification") == "shared-infra"
     ]
@@ -27,9 +28,9 @@ def assess_risk(enriched_context: dict) -> dict:
             "Failures here can impact multiple teams and services."
         )
 
-    # -------------------------
+    # ---------------------------------
     # Signal 2: Azure Networking
-    # -------------------------
+    # ---------------------------------
     network_types = ["azurerm_virtual_network", "azurerm_subnet"]
     network_changes = [
         r for r in resources if r.get("type") in network_types
@@ -44,9 +45,9 @@ def assess_risk(enriched_context: dict) -> dict:
             "Subnet or VNet changes are high risk and difficult to rollback."
         )
 
-    # -------------------------
+    # ---------------------------------
     # Signal 3: Environment Escalation
-    # -------------------------
+    # ---------------------------------
     if environment == "prod":
         risk = "HIGH"
         reasons.append(
@@ -54,12 +55,12 @@ def assess_risk(enriched_context: dict) -> dict:
         )
         comments.append(
             "🚨 Production environment change detected. "
-            "Recommend change window, validation plan, and rollback strategy."
+            "Recommend maintenance window, validation plan, and rollback strategy."
         )
 
-    # -------------------------
+    # ---------------------------------
     # Signal 4: Change Volume
-    # -------------------------
+    # ---------------------------------
     total_changes = (
         summary.get("create", 0)
         + summary.get("update", 0)
@@ -75,15 +76,41 @@ def assess_risk(enriched_context: dict) -> dict:
             "Consider breaking this into smaller, staged deployments."
         )
 
+    # ---------------------------------
+    # Confidence Scoring
+    # ---------------------------------
+    confidence = 0.3
+    if risk == "MEDIUM":
+        confidence = 0.6
+    elif risk == "HIGH":
+        confidence = 0.85
+
+    # ---------------------------------
+    # Actionable Recommendations
+    # ---------------------------------
+    if risk == "HIGH":
+        recommendations.extend([
+            "Run this change during a defined maintenance window.",
+            "Ensure a rollback plan is documented and tested.",
+            "Validate impact in a lower environment before production rollout."
+        ])
+
+    if any(r.get("type") == "azurerm_subnet" for r in resources):
+        recommendations.append(
+            "Verify subnet CIDR usage to avoid IP exhaustion or overlapping address ranges."
+        )
+
     return {
         "environment": environment,
         "risk_level": risk,
+        "confidence": confidence,
         "reasons": reasons,
-        "review_comments": comments
+        "review_comments": comments,
+        "recommendations": recommendations
     }
 
 
-def main(input_file, output_file):
+def main(input_file: str, output_file: str):
     with open(input_file, "r") as f:
         enriched_context = json.load(f)
 
