@@ -1,47 +1,70 @@
-name: Terraform Plan (Azure)
+name: AI Terraform Review (Azure)
 
 on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
-  terraform-plan:
+  ai-terraform-review:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        shell: bash
+    # 🔐 STEP 1: Permissions for GitHub PR comments
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
+      # 1️⃣ Checkout code
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2️⃣ STEP 4: Install Python dependency (requests)
+      - name: Install Python dependencies
+        run: pip install requests
+
+      # 3️⃣ Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.6.0
 
+      # 4️⃣ Azure Login (uses your existing AZURE_CREDENTIALS secret)
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      # 5️⃣ Terraform Init
       - name: Terraform Init
         working-directory: terraform/environments/dev
         run: terraform init
 
+      # 6️⃣ Terraform Plan
       - name: Terraform Plan
         working-directory: terraform/environments/dev
         run: terraform plan -out=tfplan
 
-      - name: Convert Plan to JSON
+      # 7️⃣ Terraform Plan → JSON
+      - name: Terraform Plan JSON
         working-directory: terraform/environments/dev
         run: terraform show -json tfplan > tfplan.json
 
-      - name: Upload Plan JSON
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan-json
-          path: terraform/environments/dev/tfplan.json
+      # 8️⃣ Copy plan JSON to AI context
+      - name: Copy Plan for AI
+        run: cp terraform/environments/dev/tfplan.json ai/context/tfplan.json
+
+      # 9️⃣ Context Enrichment (Day 4)
+      - name: Context Enrichment
+        run: python ai/context/enrich.py ai/context/tfplan.json ai/context/enriched_context.json
+
+      # 🔟 AI Reasoning Engine (Day 5)
+      - name: AI Reasoning
+        run: python ai/reasoning/review.py ai/context/enriched_context.json ai/reasoning/ai_review.json
+
+      # 1️⃣1️⃣ Post comment to PR (Day 6)
+      - name: Post PR Comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python ai/reasoning/post_comment.py
