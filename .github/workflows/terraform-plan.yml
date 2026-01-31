@@ -9,7 +9,6 @@ jobs:
   ai-terraform-review:
     runs-on: ubuntu-latest
 
-    # 🔐 STEP 1: Permissions for GitHub PR comments
     permissions:
       contents: read
       pull-requests: write
@@ -19,12 +18,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ STEP 4: Install Python dependency (requests)
+      # 2️⃣ Install Python dependencies
       - name: Install Python dependencies
-        run: pip install requests
+        run: |
+          pip install --upgrade pip
+          pip install requests openai
 
-      - name: Install Python dependencies
-        run: pip install requests openai
+      # 🔑 CRITICAL FIX: Make repo root importable
+      - name: Set PYTHONPATH
+        run: echo "PYTHONPATH=$GITHUB_WORKSPACE" >> $GITHUB_ENV
 
       # 3️⃣ Setup Terraform
       - name: Setup Terraform
@@ -32,7 +34,7 @@ jobs:
         with:
           terraform_version: 1.6.0
 
-      # 4️⃣ Azure Login (uses your existing AZURE_CREDENTIALS secret)
+      # 4️⃣ Azure Login
       - name: Azure Login
         uses: azure/login@v1
         with:
@@ -57,15 +59,25 @@ jobs:
       - name: Copy Plan for AI
         run: cp terraform/environments/dev/tfplan.json ai/context/tfplan.json
 
-      # 9️⃣ Context Enrichment (Day 4)
+      # 9️⃣ Context Enrichment
       - name: Context Enrichment
-        run: python ai/context/enrich.py ai/context/tfplan.json ai/context/enriched_context.json
+        run: |
+          python ai/context/enrich.py \
+            ai/context/tfplan.json \
+            ai/context/enriched_context.json
 
-      # 🔟 AI Reasoning Engine (Day 5)
+      # 🔟 AI Reasoning Engine
       - name: AI Reasoning
-        run: python ai/reasoning/review.py ai/context/enriched_context.json ai/reasoning/ai_review.json
+        env:
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+        run: |
+          python ai/reasoning/review.py \
+            ai/context/enriched_context.json \
+            ai/reasoning/ai_review.json
 
-      # 1️⃣1️⃣ Post comment to PR (Day 6)
+      # 1️⃣1️⃣ Post comment to PR
       - name: Post PR Comment
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
