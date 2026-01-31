@@ -1,6 +1,8 @@
 import json
 import sys
 
+from ai.reasoning.llm_enrichment import enrich_with_llm
+
 
 def assess_risk(enriched_context: dict) -> dict:
     environment = enriched_context.get("environment", "unknown")
@@ -12,9 +14,9 @@ def assess_risk(enriched_context: dict) -> dict:
     comments = []
     recommendations = []
 
-    # ---------------------------------
-    # Signal 1: Shared Infrastructure
-    # ---------------------------------
+    # -------------------------------------------------
+    # Signal 1: Shared Infrastructure (Blast Radius)
+    # -------------------------------------------------
     shared_changes = [
         r for r in resources if r.get("classification") == "shared-infra"
     ]
@@ -28,9 +30,9 @@ def assess_risk(enriched_context: dict) -> dict:
             "Failures here can impact multiple teams and services."
         )
 
-    # ---------------------------------
-    # Signal 2: Azure Networking
-    # ---------------------------------
+    # -------------------------------------------------
+    # Signal 2: Azure Networking Risk
+    # -------------------------------------------------
     network_types = ["azurerm_virtual_network", "azurerm_subnet"]
     network_changes = [
         r for r in resources if r.get("type") in network_types
@@ -45,9 +47,9 @@ def assess_risk(enriched_context: dict) -> dict:
             "Subnet or VNet changes are high risk and difficult to rollback."
         )
 
-    # ---------------------------------
+    # -------------------------------------------------
     # Signal 3: Environment Escalation
-    # ---------------------------------
+    # -------------------------------------------------
     if environment == "prod":
         risk = "HIGH"
         reasons.append(
@@ -58,9 +60,9 @@ def assess_risk(enriched_context: dict) -> dict:
             "Recommend maintenance window, validation plan, and rollback strategy."
         )
 
-    # ---------------------------------
+    # -------------------------------------------------
     # Signal 4: Change Volume
-    # ---------------------------------
+    # -------------------------------------------------
     total_changes = (
         summary.get("create", 0)
         + summary.get("update", 0)
@@ -76,18 +78,18 @@ def assess_risk(enriched_context: dict) -> dict:
             "Consider breaking this into smaller, staged deployments."
         )
 
-    # ---------------------------------
-    # Confidence Scoring
-    # ---------------------------------
+    # -------------------------------------------------
+    # Confidence Scoring (Explainable)
+    # -------------------------------------------------
     confidence = 0.3
     if risk == "MEDIUM":
         confidence = 0.6
     elif risk == "HIGH":
         confidence = 0.85
 
-    # ---------------------------------
-    # Actionable Recommendations
-    # ---------------------------------
+    # -------------------------------------------------
+    # Actionable Recommendations (Staff-Level)
+    # -------------------------------------------------
     if risk == "HIGH":
         recommendations.extend([
             "Run this change during a defined maintenance window.",
@@ -111,15 +113,21 @@ def assess_risk(enriched_context: dict) -> dict:
 
 
 def main(input_file: str, output_file: str):
+    # Load enriched Terraform context
     with open(input_file, "r") as f:
         enriched_context = json.load(f)
 
+    # Deterministic reasoning (SOURCE OF TRUTH)
     review = assess_risk(enriched_context)
 
+    # LLM enrichment (EXPLANATION ONLY, SAFE FALLBACK)
+    review = enrich_with_llm(enriched_context, review)
+
+    # Write final AI review output
     with open(output_file, "w") as f:
         json.dump(review, f, indent=2)
 
-    print("SUCCESS: Azure-aware AI review generated")
+    print("SUCCESS: Deterministic AI review generated with optional LLM explanation")
     print(json.dumps(review, indent=2))
 
 
