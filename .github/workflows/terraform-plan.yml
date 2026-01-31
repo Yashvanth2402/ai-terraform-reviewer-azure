@@ -1,0 +1,85 @@
+name: AI Terraform Review (Azure)
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  ai-terraform-review:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      # 1️⃣ Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2️⃣ Install Python dependencies
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests openai
+
+      # 🔑 CRITICAL FIX: Make repo root importable
+      - name: Set PYTHONPATH
+        run: echo "PYTHONPATH=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+
+      # 3️⃣ Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      # 4️⃣ Azure Login
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # 5️⃣ Terraform Init
+      - name: Terraform Init
+        working-directory: terraform/environments/dev
+        run: terraform init
+
+      # 6️⃣ Terraform Plan
+      - name: Terraform Plan
+        working-directory: terraform/environments/dev
+        run: terraform plan -out=tfplan
+
+      # 7️⃣ Terraform Plan → JSON
+      - name: Terraform Plan JSON
+        working-directory: terraform/environments/dev
+        run: terraform show -json tfplan > tfplan.json
+
+      # 8️⃣ Copy plan JSON to AI context
+      - name: Copy Plan for AI
+        run: cp terraform/environments/dev/tfplan.json ai/context/tfplan.json
+
+      # 9️⃣ Context Enrichment
+      - name: Context Enrichment
+        run: |
+          python ai/context/enrich.py \
+            ai/context/tfplan.json \
+            ai/context/enriched_context.json
+
+      # 🔟 AI Reasoning Engine
+      - name: AI Reasoning
+        env:
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+        run: |
+          python ai/reasoning/review.py \
+            ai/context/enriched_context.json \
+            ai/reasoning/ai_review.json
+
+      # 1️⃣1️⃣ Post comment to PR
+      - name: Post PR Comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python ai/reasoning/post_comment.py
