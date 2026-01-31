@@ -2,6 +2,7 @@ import json
 import sys
 
 from ai.reasoning.llm_enrichment import enrich_with_llm
+from ai.memory.memory_store import find_similar_prs
 
 
 def assess_risk(enriched_context: dict) -> dict:
@@ -79,7 +80,7 @@ def assess_risk(enriched_context: dict) -> dict:
         )
 
     # -------------------------------------------------
-    # Confidence Scoring (Explainable)
+    # Confidence Scoring (Base)
     # -------------------------------------------------
     confidence = 0.3
     if risk == "MEDIUM":
@@ -88,7 +89,7 @@ def assess_risk(enriched_context: dict) -> dict:
         confidence = 0.85
 
     # -------------------------------------------------
-    # Actionable Recommendations (Staff-Level)
+    # Actionable Recommendations
     # -------------------------------------------------
     if risk == "HIGH":
         recommendations.extend([
@@ -101,6 +102,29 @@ def assess_risk(enriched_context: dict) -> dict:
         recommendations.append(
             "Verify subnet CIDR usage to avoid IP exhaustion or overlapping address ranges."
         )
+
+    # -------------------------------------------------
+    # Day 11 — Historical PR Memory Signal
+    # -------------------------------------------------
+    resource_types = [r.get("type") for r in resources]
+
+    historical_prs = find_similar_prs(resource_types, environment)
+
+    if historical_prs:
+        reasons.append(
+            f"Similar infrastructure changes were detected in {len(historical_prs)} previous PR(s)."
+        )
+        comments.append(
+            "📚 Historical context: Similar changes have occurred before. "
+            "Review past outcomes to avoid repeating issues."
+        )
+
+        # Escalate confidence if repeated high-risk history
+        high_risk_history = [
+            pr for pr in historical_prs if pr.get("risk_level") == "HIGH"
+        ]
+        if high_risk_history and risk != "LOW":
+            confidence = min(confidence + 0.1, 0.95)
 
     return {
         "environment": environment,
@@ -117,17 +141,21 @@ def main(input_file: str, output_file: str):
     with open(input_file, "r") as f:
         enriched_context = json.load(f)
 
-    # Deterministic reasoning (SOURCE OF TRUTH)
+    # -----------------------------
+    # Deterministic AI Reasoning
+    # -----------------------------
     review = assess_risk(enriched_context)
 
-    # LLM enrichment (EXPLANATION ONLY, SAFE FALLBACK)
+    # -----------------------------
+    # LLM Enrichment (Explanation Only)
+    # -----------------------------
     review = enrich_with_llm(enriched_context, review)
 
     # Write final AI review output
     with open(output_file, "w") as f:
         json.dump(review, f, indent=2)
 
-    print("SUCCESS: Deterministic AI review generated with optional LLM explanation")
+    print("SUCCESS: AI review generated with history-aware reasoning and LLM explanation")
     print(json.dumps(review, indent=2))
 
 
